@@ -1,0 +1,41 @@
+# ============================================================
+# SECURITY: Never commit your .env file.
+# It contains your private key or mnemonic — anyone who gets
+# this file can drain your wallet instantly.
+# ============================================================
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code internal files
+.claude/
