@@ -289,9 +289,9 @@ def execute_snipe(w3, wallet, private_key, usdce, token_data: dict,
     except Exception:
         token_decimals = 18
 
-    expected_tokens = (amount_usd / price) if price > 0 else 0
-    slippage = 1.0 - config.SLIPPAGE_PERCENT / 100.0
-    min_out = int(expected_tokens * 10 ** token_decimals * slippage)
+    # Bonding curve price can only go UP — minTokenAmount=0 is correct here.
+    # A slippage minimum would cause reverts if anyone else buys first, for no benefit.
+    min_out = 0
 
     info(f"SNIPE {name} — spending ${amount_usd:.2f} USDC.e on bonding curve")
     info(f"  initialFDV=${token_data.get('initialFDV')}  bondingFDV=${token_data.get('bondingFDV')}  "
