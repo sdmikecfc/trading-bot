@@ -38,11 +38,13 @@ if not MNEMONIC and not PRIVATE_KEY:
 RPC_URL = _require("RPC_URL")
 CHAIN_ID = _int("CHAIN_ID", 97477)
 
-# ── Addresses ───────────────────────────────────────────────
-TOKEN_ADDRESS = _require("TOKEN_ADDRESS")
+# ── Fixed addresses ─────────────────────────────────────────
 USDCE_ADDRESS = _require("USDCE_ADDRESS")
-POOL_ADDRESS = _require("POOL_ADDRESS")
 ROUTER_ADDRESS = _require("ROUTER_ADDRESS")
+
+# ── Doma API ────────────────────────────────────────────────
+DOMA_API_KEY = _require("DOMA_API_KEY")
+DOMA_API_URL = "https://api.doma.xyz/graphql"
 
 # ── Trade settings ──────────────────────────────────────────
 TRADE_MIN_USD = _float("TRADE_MIN_USD", 0.10)
@@ -55,12 +57,12 @@ SLIPPAGE_PERCENT = _float("SLIPPAGE_PERCENT", 2.0)
 BUY_WEIGHT = _float("BUY_WEIGHT", 65)
 SELL_WEIGHT = _float("SELL_WEIGHT", 35)
 
-# ── Price floor ─────────────────────────────────────────────
-PRICE_FLOOR_USD = _float("PRICE_FLOOR_USD", 0.0)
-
 # ── Daily cap ───────────────────────────────────────────────
 DAILY_LOSS_LIMIT_USD = _float("DAILY_LOSS_LIMIT_USD", 10.0)
 MIN_ETH_FOR_GAS = _float("MIN_ETH_FOR_GAS", 0.001)
+
+# ── Token list refresh ──────────────────────────────────────
+TOKEN_REFRESH_CYCLES = _int("TOKEN_REFRESH_CYCLES", 50)
 
 # ── Mode ────────────────────────────────────────────────────
 DRY_RUN = _bool("DRY_RUN", True)
