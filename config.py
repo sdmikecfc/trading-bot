@@ -64,5 +64,13 @@ MIN_ETH_FOR_GAS = _float("MIN_ETH_FOR_GAS", 0.001)
 # ── Token list refresh ──────────────────────────────────────
 TOKEN_REFRESH_CYCLES = _int("TOKEN_REFRESH_CYCLES", 50)
 
+# ── Sniper ──────────────────────────────────────────────────
+SNIPE_AMOUNT_USD = _float("SNIPE_AMOUNT_USD", 1.00)
+SNIPE_DAILY_LIMIT = _float("SNIPE_DAILY_LIMIT", 20.00)
+SNIPE_MAX_INITIAL_FDV = _float("SNIPE_MAX_INITIAL_FDV", 500)
+SNIPE_MIN_SPREAD = _float("SNIPE_MIN_SPREAD", 1.5)
+GRADUATION_SELL_PERCENT = _float("GRADUATION_SELL_PERCENT", 75)
+SNIPE_POLL_SEC = _int("SNIPE_POLL_SEC", 60)
+
 # ── Mode ────────────────────────────────────────────────────
 DRY_RUN = _bool("DRY_RUN", True)
