@@ -769,6 +769,10 @@ def main():
         and not os.getenv("PRIVATE_KEY", "").strip()
     )
     if not is_first_run:
+        # Show the frog banner briefly on every launch, then settle to compact header
+        os.system("cls" if os.name == "nt" else "clear")
+        _print_banner()
+        time.sleep(2)
         os.system("cls" if os.name == "nt" else "clear")
         _print_compact_header()
 
