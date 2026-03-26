@@ -761,7 +761,8 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
 
         if receipt.status == 1:
             print(f"\n  {green_b('✓ BUY CONFIRMED')}  {bold(domain)}")
-            print(f"  Amount        : {green_b('$' + f'{amount_usd:.2f}')} USDC.e")
+            amt_fmt = f"{amount_usd:.4f}".rstrip("0").rstrip(".")
+            print(f"  Amount        : {green_b('$' + amt_fmt)} USDC.e")
             print(f"  Block         : {receipt.blockNumber}")
             print(f"  Confirmed in  : {elapsed:.1f}s")
             if after_schedule > 0:
