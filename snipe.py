@@ -62,17 +62,18 @@ def _load_frog() -> list[str]:
     except FileNotFoundError:
         return []
 
-    # Take every other line (step=2) from the frog figure to halve the height,
-    # and crop to 50 chars wide — fits a standard 80-col CMD window without fullscreen.
+    # Art is 100 chars wide × 55 lines. Take every other line → ~27 lines tall.
+    # Full width shown — launch.bat sets the CMD window to 120 cols.
     lines = []
-    for line in raw[14:72:2]:   # ~29 lines tall
-        cropped = line[40:90]   # 50 chars wide, centred on the frog body
+    for line in raw[0:55:2]:
         colored = []
-        for ch in cropped:
-            if ch in "@%#":
+        for ch in line:
+            if ch in "@B%8WM&#":
                 colored.append(green_b(ch))
-            elif ch in "*=":
+            elif ch in "dpqwmZOQL0CUY":
                 colored.append(yellow(ch))
+            elif ch == "$":
+                colored.append(dim(ch))
             else:
                 colored.append(dim(ch))
         lines.append("".join(colored))
@@ -98,30 +99,15 @@ BIG_MIKE_TIPS = [
 
 
 def _print_banner():
-    """Full frog art + title panel. Sized to fit a standard 80-col CMD window."""
+    """Frog art with title header above. Full 100-char width — CMD set to 120 cols by launch.bat."""
+    print()
+    print(green_b("  D O M A   S N I P E R") + "  " + dim("Community Build v1.0  |  web3guides.com  |  discord.gg/doma"))
+    print(dim("  " + "─" * 98))
+    print()
     frog_lines = _load_frog()
-    title_panel = [
-        dim("┌─────────────────────────────┐"),
-        dim("│") + "                             " + dim("│"),
-        dim("│") + "  " + bold("D O M A  S N I P E R") + "   " + dim("│"),
-        dim("│") + "  " + cyan("Community Build  v1.0") + "  " + dim("│"),
-        dim("│") + "                             " + dim("│"),
-        dim("│") + "  " + cyan("web3guides.com") + "           " + dim("│"),
-        dim("│") + "  " + dim("discord.gg/doma") + "           " + dim("│"),
-        dim("│") + "                             " + dim("│"),
-        dim("└─────────────────────────────┘"),
-    ]
-    if frog_lines:
-        panel_start = max(0, len(frog_lines) // 2 - len(title_panel) // 2)
-        for i, fline in enumerate(frog_lines):
-            pi = i - panel_start
-            if 0 <= pi < len(title_panel):
-                print(" " + fline + " " + title_panel[pi])
-            else:
-                print(" " + fline)
-    else:
-        for line in title_panel:
-            print("  " + line)
+    for line in frog_lines:
+        print(line)
+    print()
 
 
 def _print_compact_header():
