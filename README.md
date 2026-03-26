@@ -2,7 +2,7 @@
 
 Automatically snipes token launches on the [Doma Protocol](https://doma.xyz) bonding curve — buying at the floor price the instant a token goes live.
 
-Built and maintained by [@web3guides](https://web3guides.com) · [web3guides.com/doma](https://web3guides.com/doma)
+Built and maintained by [@web3guides](https://web3guides.com) · [web3guides.com/doma](https://web3guides.com/doma) · [discord.gg/doma](https://discord.gg/doma)
 
 ---
 
@@ -13,7 +13,6 @@ Doma Protocol lets users fractionalize domain names into ERC-20 tokens. Each tok
 1. Reads the public Doma launch schedule
 2. Waits for your chosen token to go live
 3. Buys instantly at the floor price (typically within 10–15 seconds of launch)
-4. Optionally monitors for price targets and graduation to Uniswap V3
 
 ---
 
@@ -21,7 +20,7 @@ Doma Protocol lets users fractionalize domain names into ERC-20 tokens. Each tok
 
 | File | What it does |
 |------|-------------|
-| `snipe.py` | **Interactive** — shows upcoming launches, you pick one and set your amount, it handles the rest. Recommended for beginners. |
+| `snipe.py` | **Interactive** — guided setup, shows upcoming launches, you pick one (or all), it handles the rest. Start here. |
 | `schedule_sniper.py` | **Automated** — runs continuously, auto-snipes every eligible launch based on your criteria. For advanced users. |
 
 ---
@@ -29,8 +28,8 @@ Doma Protocol lets users fractionalize domain names into ERC-20 tokens. Each tok
 ## Prerequisites
 
 - **Python 3.11+** — [python.org/downloads](https://python.org/downloads)
-- **A wallet** with USDC.e and a small amount of ETH on Doma chain (for gas)
-- **USDC.e on Doma chain** — bridge from Ethereum or another chain via [Across Protocol](https://across.to) or [Optimism Superbridge](https://superbridge.app)
+- **A dedicated wallet** with USDC.e and a small amount of ETH on Doma chain
+- **USDC.e on Doma chain** — bridge via [Across Protocol](https://across.to) or [Optimism Superbridge](https://superbridge.app)
 
 > Gas on Doma chain is nearly free. Keep at least 0.01 ETH for comfortable headroom.
 
@@ -46,29 +45,35 @@ cd trading-bot
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Copy the config template
-cp .env.example .env
+# 3. Run the sniper
+python snipe.py
 ```
+
+**Windows users:** double-click `launch.bat` instead of step 3. It checks your Python install and launches the bot automatically.
 
 ---
 
-## Configuration
+## First Run — Wallet Setup
 
-Open `.env` in any text editor and fill in **only** what's required:
+When you run `snipe.py` for the first time, it walks you through a guided setup:
 
-```env
-# Your wallet — choose ONE of these:
-MNEMONIC=word1 word2 word3 ... word12
-# OR
-PRIVATE_KEY=0xYourPrivateKeyHere
+**Screen 1 — Welcome**
+Introduces the tool and explains what's about to happen.
 
-# Start in dry-run mode (no real transactions) — change to false when ready
-DRY_RUN=true
-```
+**Screen 2 — Big Mike Tips**
+Five things to know before you connect a wallet — written in plain English, not tech jargon.
 
-Everything else has sensible defaults. The network settings, API key, and contract addresses are pre-filled and correct for Doma chain.
+**Screen 3 — Wallet connection**
+The bot creates a **private encrypted keystore file** on your machine. Here's what that means:
 
-> **Security:** Your `.env` file is blocked from Git by `.gitignore`. It never leaves your machine.
+> *"We're going to create a private encrypted JSON file that is password protected. That way if someone ever gets access to the file, they won't be able to open it without your password."*
+
+- Paste your private key or seed phrase — input is hidden, never shown on screen
+- Choose a password (8+ characters)
+- The bot encrypts your key with AES-256 (the same standard MetaMask uses internally) and saves it as `keystore.json`
+- **Your key never leaves your machine.** It is never sent to any server, API, or website.
+
+Every run after that: just enter your password and go straight to the launch table.
 
 ---
 
@@ -78,23 +83,24 @@ Everything else has sensible defaults. The network settings, API key, and contra
 python snipe.py
 ```
 
-You'll see a table of upcoming launches:
+After setup you'll see a table of upcoming launches:
 
 ```
   Upcoming launches — next 24 hours
 
-  +------+--------------------------------+------------+----------------+-------------+---------+
-  |  #   | Domain                         | Launch UTC |  Starting FDV  | Bonding FDV | Spread  |
-  +------+--------------------------------+------------+----------------+-------------+---------+
-  |  1   | chainspectre.com               | 10:00      |  $300          | $500        | 1.7x    |
-  |  2   | tokentycoon.com                | 14:00      |  $750          | $1,200      | 1.6x    |
-  +------+--------------------------------+------------+----------------+-------------+---------+
+  +------+--------------------------------+------------+----------------+-------------+---------+---------+
+  |  #   | Domain                         | Launch UTC |  Starting FDV  | Bonding FDV | Buyout  | Spread  |
+  +------+--------------------------------+------------+----------------+-------------+---------+---------+
+  |  1   | chainspectre.com               | 10:00      |  $300          | $500        | $480    | 1.7x    |
+  |  2   | tokentycoon.com                | 14:00      |  $750          | $1,200      | $1,100  | 1.6x    |
+  +------+--------------------------------+------------+----------------+-------------+---------+---------+
 
-  Pick a launch (number or domain name): 1
-  How much USDC.e to snipe with? $5.00
+  Pick a launch (number, domain name, or 'all'):
 ```
 
-The bot then counts down to launch and fires the buy automatically.
+**Pick a single launch** — enter a number or domain name, set your amount, the bot counts down and fires automatically.
+
+**Type `all`** — snipes every launch in the next 24 hours. Each launch runs in its own thread so none block the others. You set one per-launch amount, confirm the total, and the bot handles the rest. A results summary prints when everything finishes.
 
 ---
 
@@ -102,7 +108,7 @@ The bot then counts down to launch and fires the buy automatically.
 
 `schedule_sniper.py` runs as a background process and handles all launches automatically based on your criteria.
 
-**Additional settings for the automated sniper** (configure in `.env`):
+Configure in `.env`:
 
 ```env
 SNIPE_AMOUNT_USD=5.00        # How much to spend per snipe
@@ -127,34 +133,13 @@ It will:
 
 ---
 
-## One-Time Approval (Optional)
-
-For the automated sniper, you can pre-approve the router to save a transaction during snipes:
-
-```bash
-python preapprove.py
-```
-
-> The interactive `snipe.py` handles approvals automatically per-launch.
-
----
-
-## Recovery Tool
-
-If a graduation sell fails (tokens get stuck in the router), run:
-
-```bash
-python recover_sell.py yourdomain.com
-```
-
----
-
 ## Understanding the Numbers
 
 | Term | Meaning |
 |------|---------|
 | **Starting FDV** | Floor price × total supply. The minimum the market cap can be. |
 | **Bonding FDV** | Target FDV when the bonding curve is full. Token graduates to Uniswap V3 at this point. |
+| **Buyout** | Total USDC.e needed to fill the bonding curve completely. |
 | **Spread** | Bonding FDV ÷ Starting FDV. Higher = more room for price appreciation before graduation. |
 | **Graduation** | When the bonding curve fills completely. Token migrates to Uniswap V3 with real liquidity. |
 
@@ -163,13 +148,13 @@ The price on the bonding curve can only go **up**. You buy at the current floor 
 
 ---
 
-## Security Notes
+## Security
 
-- **Your private key never leaves your machine.** It is loaded from `.env` at runtime and used only to sign transactions locally.
-- **`.env` is in `.gitignore`** — it cannot be accidentally committed to GitHub.
-- **Per-snipe approvals** — the bot approves each launchpad contract individually, not a blanket approval for all tokens.
-- **DRY_RUN=true by default** — no real transactions until you explicitly opt in.
-- Use a **dedicated wallet** with only the funds you intend to trade. Do not use your main wallet.
+- **Encrypted keystore** — your private key is stored AES-256 encrypted on your machine. Nobody can read it without your password.
+- **Key never transmitted** — the bot signs transactions locally. Nothing is sent to any external server.
+- **`keystore.json` is in `.gitignore`** — it cannot be accidentally committed or pushed to GitHub.
+- **Per-snipe approvals** — the bot approves each launchpad contract individually, never a blanket approval.
+- **Use a dedicated wallet** — create a fresh wallet just for sniping. Only fund it with what you plan to trade. You can move tokens to your main wallet any time after purchase.
 
 ---
 
@@ -184,4 +169,5 @@ This software is provided for educational purposes. Cryptocurrency trading invol
 - [Doma Protocol](https://doma.xyz)
 - [Doma Explorer](https://explorer.doma.xyz)
 - [web3guides.com — Doma Guides](https://web3guides.com/doma)
+- [Doma Discord](https://discord.gg/doma)
 - [GitHub Issues](https://github.com/sdmikecfc/trading-bot/issues)
