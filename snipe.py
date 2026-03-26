@@ -466,37 +466,47 @@ def _prompt_credential() -> tuple:
         if choice == "1":
             print()
             print(yellow("  Your key will be visible as you type/paste."))
-            print(dim   ("  The screen clears immediately after — encrypt first, look away if needed."))
+            print(dim   ("  Screen clears the moment you hit Enter."))
             print()
             try:
                 key_raw = input("  Private key: ").strip()
             except KeyboardInterrupt:
                 print("\n  Exited.")
                 sys.exit(0)
-            if not key_raw:
-                print("  Nothing entered — try again.\n")
-                continue
-            acct = _account_from_key(key_raw)
             os.system("cls" if os.name == "nt" else "clear")
             _print_compact_header()
+            if not key_raw:
+                print(red("  Nothing entered — try again.\n"))
+                continue
+            try:
+                acct = _account_from_key(key_raw)
+            except Exception as e:
+                print(red(f"  Invalid private key: {e}"))
+                print("  Double-check it and try again.\n")
+                continue
             return acct, key_raw
 
         elif choice == "2":
             print()
             print(yellow("  Your phrase will be visible as you type/paste."))
-            print(dim   ("  The screen clears immediately after — encrypt first, look away if needed."))
+            print(dim   ("  Screen clears the moment you hit Enter."))
             print()
             try:
                 phrase = input("  Seed phrase: ").strip()
             except KeyboardInterrupt:
                 print("\n  Exited.")
                 sys.exit(0)
-            if not phrase:
-                print("  Nothing entered — try again.\n")
-                continue
-            acct = _account_from_mnemonic(phrase)
             os.system("cls" if os.name == "nt" else "clear")
             _print_compact_header()
+            if not phrase:
+                print(red("  Nothing entered — try again.\n"))
+                continue
+            try:
+                acct = _account_from_mnemonic(phrase)
+            except Exception as e:
+                print(red(f"  Invalid seed phrase: {e}"))
+                print("  Double-check it and try again.\n")
+                continue
             return acct, phrase
 
         else:
