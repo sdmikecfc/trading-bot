@@ -18,7 +18,9 @@ Requirements:
 
 import contextlib
 import csv
+import getpass
 import io
+import json
 import os
 import sys
 import threading
@@ -76,26 +78,28 @@ def _load_frog() -> list[str]:
         lines.append("".join(colored))
     return lines
 
-WARNINGS = [
-    ("USE A NEW WALLET",
-     "Create a fresh wallet just for sniping. Never use your main wallet."),
-    ("ONLY FUND WHAT YOU'RE WILLING TO LOSE",
-     "Only deposit the amount you plan to snipe with. Nothing more."),
-    ("THIS IS A COMMUNITY TOOL",
-     "Built by web3guides.com — not officially affiliated with Doma Protocol."),
-    ("CRYPTO IS RISKY",
-     "Token prices can go up and down. This is not financial advice."),
-    ("REVIEW YOUR .env FILE",
-     "Make sure DRY_RUN=false only when you are ready to trade real funds."),
+BIG_MIKE_TIPS = [
+    ("Make a fresh wallet just for this app",
+     "Don't use your main wallet. Create a brand new one in MetaMask or Rabby.\n"
+     "     If anything ever went wrong, only what's in this wallet is at risk."),
+    ("Only fund it with what you're willing to snipe with",
+     "Think of it like a poker stack. Put in what you're comfortable with.\n"
+     "     Never deposit more than you can afford to lose."),
+    ("You can move purchased tokens out any time",
+     "After a snipe your tokens sit in this wallet on Doma chain.\n"
+     "     Transfer or bridge them to your main wallet whenever you like."),
+    ("Your key never leaves your machine",
+     "We encrypt it locally with a password you choose. Nobody — not us,\n"
+     "     not Doma, not anyone online — can access it."),
+    ("Got questions? Join the community",
+     "The Doma Discord is the best place for help. Real people, quick answers.\n"
+     "     discord.gg/doma"),
 ]
 
 
-def show_intro():
-    os.system("cls" if os.name == "nt" else "clear")
-
+def _print_banner():
+    """Full frog art + title panel. First-run welcome screen only."""
     frog_lines = _load_frog()
-
-    # Title panel lines (right side), padded to 44 chars
     title_panel = [
         dim("┌──────────────────────────────────────────┐"),
         dim("│") + "                                          " + dim("│"),
@@ -107,9 +111,7 @@ def show_intro():
         dim("│") + "                                          " + dim("│"),
         dim("└──────────────────────────────────────────┘"),
     ]
-
     if frog_lines:
-        # Print frog lines, tuck the title panel alongside lines 10-18
         panel_start = max(0, len(frog_lines) // 2 - len(title_panel) // 2)
         for i, fline in enumerate(frog_lines):
             pi = i - panel_start
@@ -118,33 +120,24 @@ def show_intro():
             else:
                 print("  " + fline)
     else:
-        # Fallback if frog.txt not found
         for line in title_panel:
             print("  " + line)
 
-    print()
-    print(bold("  ⚠  PLEASE READ BEFORE CONTINUING"))
-    print()
 
-    for i, (title, body) in enumerate(WARNINGS, 1):
-        print(f"  {yellow(str(i) + '.')} {bold(title)}")
-        print(f"     {dim(body)}")
-        print()
-
-    print(dim("  " + "─" * 60))
-    print()
-    try:
-        input("  Press Enter to continue (Ctrl+C to exit)... ")
-    except KeyboardInterrupt:
-        print("\n\n  Exited.")
-        sys.exit(0)
-
-    os.system("cls" if os.name == "nt" else "clear")
-    # Compact persistent header shown on every screen after intro
+def _print_compact_header():
+    """One-line frog header. Shown on every screen after the welcome."""
     print(green_b("  \\O//") + "  " + bold("DOMA SNIPER") + "  " + dim("v1.0  |  web3guides.com  |  github.com/sdmikecfc/trading-bot"))
     print(green  ("  (^,^)"))
     print(dim    ("  " + "─" * 70))
     print()
+
+
+def _pause(prompt="  Press Enter to continue (Ctrl+C to exit)... "):
+    try:
+        input(prompt)
+    except KeyboardInterrupt:
+        print("\n  Exited.")
+        sys.exit(0)
 
 import requests
 from dotenv import load_dotenv
@@ -162,10 +155,11 @@ RPC_URL    = os.getenv("RPC_URL", "https://rpc.doma.xyz")
 CHAIN_ID   = int(os.getenv("CHAIN_ID", "97477"))
 USDCE_ADDR = os.getenv("USDCE_ADDRESS", "0x31EEf89D5215C305304a2fA5376a1f1b6C5dc477")
 
-PRELOAD_SEC = 120   # Start tight-polling 2 minutes before scheduled launch
-POLL_SEC    = 3     # Poll API every 3 seconds during tight window
-GIVE_UP_MIN = 15    # Give up if token has not gone live 15 minutes after schedule
-MAX_UINT256 = 2 ** 256 - 1
+PRELOAD_SEC   = 120   # Start tight-polling 2 minutes before scheduled launch
+POLL_SEC      = 3     # Poll API every 3 seconds during tight window
+GIVE_UP_MIN   = 15    # Give up if token has not gone live 15 minutes after schedule
+MAX_UINT256   = 2 ** 256 - 1
+KEYSTORE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keystore.json")
 
 # ── ABIs ──────────────────────────────────────────────────────────────────────
 
@@ -372,61 +366,169 @@ def pick_amount(usdce_balance: float) -> float:
         return amount
 
 
-# ── Wallet ────────────────────────────────────────────────────────────────────
+# ── Wallet — keystore onboarding & unlock ─────────────────────────────────────
 
-def _wallet_setup_help(reason: str = ""):
-    """Print a beginner-friendly wallet setup guide and exit."""
-    print()
-    print(red_b("  WALLET NOT FOUND" + (f" — {reason}" if reason else "")))
-    print()
-    print("  No wallet credentials were found in your .env file.")
-    print("  Here's how to set it up in under 2 minutes:\n")
-    print(bold("  Step 1 ›") + " Find the file called " + cyan(".env") + " in the same folder as snipe.py")
-    print(dim  ("           (If it doesn't exist, rename .env.example to .env)"))
-    print()
-    print(bold("  Step 2 ›") + " Open .env in any text editor  " + dim("(Notepad works fine)"))
-    print()
-    print(bold("  Step 3 ›") + " Add one of these lines:\n")
-    print(dim  ("           Option A — Private key (starts with 0x):"))
-    print(cyan ("              PRIVATE_KEY=0xabc123...your64hexcharshere"))
-    print()
-    print(dim  ("           Option B — 12-word seed phrase:"))
-    print(cyan ("              MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12"))
-    print()
-    print(bold("  Step 4 ›") + " Save the file, then run snipe.py again.\n")
-    print(dim  ("  " + "─" * 62))
-    print()
-    print(bold("  Is it safe to put my key in a file?") + "  " + green_b("Yes — here's why:"))
-    print()
-    print(green("  ✓") + "  This app runs " + bold("100% on your own computer.") + " Nothing is uploaded.")
-    print(green("  ✓") + "  Your key is used only to " + bold("sign transactions locally."))
-    print(green("  ✓") + "  It is " + bold("NEVER sent") + " to any server, API, or website.")
-    print(green("  ✓") + "  The .env file is blocked from Git — it cannot be accidentally shared.")
-    print(green("  ✓") + "  Use a " + bold("dedicated wallet") + " with only the funds you plan to trade.")
-    print()
-    print(dim  ("  Need help? → https://web3guides.com/doma"))
-    print()
-    sys.exit(1)
+def _account_from_input(key_raw: str):
+    """Parse a private key or seed phrase string into an Account."""
+    key_raw = key_raw.strip()
+    if " " in key_raw:
+        Account.enable_unaudited_hdwallet_features()
+        idx = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
+        return Account.from_mnemonic(key_raw, account_path=f"m/44'/60'/0'/0/{idx}")
+    return Account.from_key(key_raw)
 
 
-def load_wallet():
+def first_run_onboarding() -> tuple[str, str]:
+    """
+    Three-screen first-run wizard.
+    Screen 1 — Welcome banner
+    Screen 2 — Big Mike Tips
+    Screen 3 — Keystore explanation + key entry + password creation
+    Returns (address, private_key_hex).
+    """
+
+    # ── Screen 1: Welcome ──────────────────────────────────────────────────────
+    os.system("cls" if os.name == "nt" else "clear")
+    _print_banner()
+    print()
+    print(bold("  Welcome to Doma Sniper!"))
+    print()
+    print("  This tool automatically buys Doma domain tokens the instant a launch")
+    print("  goes live — at the floor price, before anyone else.")
+    print()
+    print("  Before we get started, we need to connect a wallet.")
+    print()
+    print(dim("  " + "─" * 60))
+    print()
+    _pause()
+
+    # ── Screen 2: Big Mike Tips ────────────────────────────────────────────────
+    os.system("cls" if os.name == "nt" else "clear")
+    _print_compact_header()
+    print(bold("  Before you connect — a few tips from Big Mike:"))
+    print()
+    for i, (title, body) in enumerate(BIG_MIKE_TIPS, 1):
+        print(f"  {yellow(str(i) + '.')} {bold(title)}")
+        print(f"     {dim(body)}")
+        print()
+    print(dim("  " + "─" * 60))
+    print()
+    _pause()
+
+    # ── Screen 3: Keystore setup ───────────────────────────────────────────────
+    os.system("cls" if os.name == "nt" else "clear")
+    _print_compact_header()
+    print(bold("  Step 1 — Connect your wallet"))
+    print()
+    print("  We're going to create a " + bold("private encrypted JSON file") + " that is")
+    print("  password protected. That way if someone ever gets access to the file,")
+    print("  they won't be able to open it without your password.")
+    print()
+    print(green("  ✓") + "  Encrypted with AES-256 — the same standard MetaMask uses internally.")
+    print(green("  ✓") + "  Your key never leaves this machine.")
+    print(green("  ✓") + "  Only your password can unlock it. There is no password reset.")
+    print()
+    print(dim("  " + "─" * 60))
+    print()
+
+    # Get and validate key / seed phrase
+    while True:
+        try:
+            key_raw = getpass.getpass("  Paste your private key or seed phrase (hidden): ")
+        except KeyboardInterrupt:
+            print("\n  Exited.")
+            sys.exit(0)
+        if not key_raw.strip():
+            print("  Nothing entered — try again.\n")
+            continue
+        try:
+            acct = _account_from_input(key_raw)
+            break
+        except Exception as e:
+            print(f"\n  {red('Invalid key or phrase:')} {e}")
+            print("  Double-check it and try again.\n")
+
+    print(f"\n  {green('✓')}  Wallet recognised: {cyan(acct.address)}")
+    print()
+
+    # Create and confirm password
+    while True:
+        try:
+            pwd  = getpass.getpass("  Create a keystore password (min 8 characters): ")
+            if len(pwd) < 8:
+                print("  Password must be at least 8 characters. Try again.\n")
+                continue
+            pwd2 = getpass.getpass("  Confirm password: ")
+        except KeyboardInterrupt:
+            print("\n  Exited.")
+            sys.exit(0)
+        if pwd != pwd2:
+            print("  Passwords don't match — try again.\n")
+            continue
+        break
+
+    # Encrypt and save keystore
+    keystore = Account.encrypt(acct.key, pwd)
+    with open(KEYSTORE_PATH, "w") as f:
+        json.dump(keystore, f, indent=2)
+
+    print()
+    print(green_b("  ✓  Keystore saved!"))
+    print(dim(f"     {KEYSTORE_PATH}"))
+    print()
+    print(dim("  You'll only need your password from now on."))
+    print(dim("  Keep it somewhere safe — there is no password reset."))
+    print()
+    _pause("  Press Enter to continue to the launch table... ")
+
+    os.system("cls" if os.name == "nt" else "clear")
+    _print_compact_header()
+    return acct.address, acct.key.hex()
+
+
+def unlock_keystore() -> tuple[str, str]:
+    """Prompt for password, decrypt existing keystore. Returns (address, key_hex)."""
+    with open(KEYSTORE_PATH) as f:
+        ks = json.load(f)
+    while True:
+        try:
+            pwd = getpass.getpass("  Keystore password: ")
+        except KeyboardInterrupt:
+            print("\n  Exited.")
+            sys.exit(0)
+        try:
+            private_key = Account.decrypt(ks, pwd)
+            acct        = Account.from_key(private_key)
+            return acct.address, acct.key.hex()
+        except Exception:
+            print(red("  Wrong password — try again."))
+
+
+def load_wallet() -> tuple[str, str]:
+    """
+    Keystore present  → unlock with password.
+    First run         → full three-screen onboarding wizard, creates keystore.
+    .env fallback     → for users who set up before keystore was introduced.
+    """
+    if os.path.exists(KEYSTORE_PATH):
+        return unlock_keystore()
+
+    # Backward-compat: .env credentials present — use them, suggest migration
     mnemonic    = os.getenv("MNEMONIC", "").strip()
     private_key = os.getenv("PRIVATE_KEY", "").strip()
+    if mnemonic or private_key:
+        try:
+            acct = _account_from_input(mnemonic if mnemonic else private_key)
+            print(yellow("  Note: using credentials from .env."))
+            print(dim   ("  Run snipe.py once with no .env key set to create a keystore."))
+            print()
+            return acct.address, acct.key.hex()
+        except Exception as e:
+            print(red(f"  Invalid key in .env: {e}"))
+            sys.exit(1)
 
-    if not mnemonic and not private_key:
-        _wallet_setup_help()
-
-    try:
-        if mnemonic:
-            Account.enable_unaudited_hdwallet_features()
-            index = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
-            acct  = Account.from_mnemonic(mnemonic, account_path=f"m/44'/60'/0'/0/{index}")
-        else:
-            acct = Account.from_key(private_key)
-    except Exception as e:
-        _wallet_setup_help(reason=str(e))
-
-    return acct.address, acct.key.hex()
+    # No keystore, no .env — first run
+    return first_run_onboarding()
 
 
 # ── Doma API ──────────────────────────────────────────────────────────────────
@@ -632,7 +734,16 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    show_intro()
+    # First-run: onboarding wizard handles all screen management internally.
+    # Returning users: show compact header here, then password prompt in load_wallet.
+    is_first_run = (
+        not os.path.exists(KEYSTORE_PATH)
+        and not os.getenv("MNEMONIC", "").strip()
+        and not os.getenv("PRIVATE_KEY", "").strip()
+    )
+    if not is_first_run:
+        os.system("cls" if os.name == "nt" else "clear")
+        _print_compact_header()
 
     # Connect
     w3 = Web3(Web3.HTTPProvider(RPC_URL))

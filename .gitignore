@@ -45,3 +45,6 @@ positions.json
 scheduled_snipes.json
 seen_tokens.json
 tokens.json
+
+# Encrypted wallet keystore — contains your encrypted private key, never commit
+keystore.json
