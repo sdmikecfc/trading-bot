@@ -62,11 +62,11 @@ def _load_frog() -> list[str]:
     except FileNotFoundError:
         return []
 
-    # File lines 12–76 (0-indexed 11–75) contain the frog figure.
-    # Strip 30 leading '+' background chars, show 100 chars → fits ~80-col terminals.
+    # Take every other line (step=2) from the frog figure to halve the height,
+    # and crop to 50 chars wide — fits a standard 80-col CMD window without fullscreen.
     lines = []
-    for line in raw[11:76]:
-        cropped = line[30:130]  # 100-char window centred on the frog
+    for line in raw[14:72:2]:   # ~29 lines tall
+        cropped = line[40:90]   # 50 chars wide, centred on the frog body
         colored = []
         for ch in cropped:
             if ch in "@%#":
@@ -98,27 +98,27 @@ BIG_MIKE_TIPS = [
 
 
 def _print_banner():
-    """Full frog art + title panel. First-run welcome screen only."""
+    """Full frog art + title panel. Sized to fit a standard 80-col CMD window."""
     frog_lines = _load_frog()
     title_panel = [
-        dim("┌──────────────────────────────────────────┐"),
-        dim("│") + "                                          " + dim("│"),
-        dim("│") + "  " + bold("D O M A   S N I P E R") + "              " + dim("│"),
-        dim("│") + "  " + cyan("Community Build  v1.0") + "               " + dim("│"),
-        dim("│") + "                                          " + dim("│"),
-        dim("│") + "  " + cyan("by web3guides.com") + "                   " + dim("│"),
-        dim("│") + "  " + dim("github.com/sdmikecfc/trading-bot") + "  " + dim("│"),
-        dim("│") + "                                          " + dim("│"),
-        dim("└──────────────────────────────────────────┘"),
+        dim("┌─────────────────────────────┐"),
+        dim("│") + "                             " + dim("│"),
+        dim("│") + "  " + bold("D O M A  S N I P E R") + "   " + dim("│"),
+        dim("│") + "  " + cyan("Community Build  v1.0") + "  " + dim("│"),
+        dim("│") + "                             " + dim("│"),
+        dim("│") + "  " + cyan("web3guides.com") + "           " + dim("│"),
+        dim("│") + "  " + dim("discord.gg/doma") + "           " + dim("│"),
+        dim("│") + "                             " + dim("│"),
+        dim("└─────────────────────────────┘"),
     ]
     if frog_lines:
         panel_start = max(0, len(frog_lines) // 2 - len(title_panel) // 2)
         for i, fline in enumerate(frog_lines):
             pi = i - panel_start
             if 0 <= pi < len(title_panel):
-                print("  " + fline + "  " + title_panel[pi])
+                print(" " + fline + " " + title_panel[pi])
             else:
-                print("  " + fline)
+                print(" " + fline)
     else:
         for line in title_panel:
             print("  " + line)
