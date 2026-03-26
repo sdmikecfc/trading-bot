@@ -16,10 +16,12 @@ Requirements:
     pip install -r requirements.txt
 """
 
+import contextlib
 import csv
 import io
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -312,19 +314,44 @@ def print_table(launches: list[dict]):
 
 # ── User interaction ──────────────────────────────────────────────────────────
 
-def pick_launch(launches: list[dict]) -> dict:
+def pick_launch(launches: list[dict]):
+    """Return a single launch dict, or the string 'all'."""
     while True:
-        choice = input("  Pick a launch (number or domain name): ").strip()
+        choice = input("  Pick a launch (number, domain name, or 'all'): ").strip()
+        if choice.lower() == "all":
+            return "all"
         if choice.isdigit():
             idx = int(choice) - 1
             if 0 <= idx < len(launches):
                 return launches[idx]
-            print(f"  Please enter a number between 1 and {len(launches)}.")
+            print(f"  Please enter a number between 1 and {len(launches)}, a domain name, or 'all'.")
         else:
             matches = [l for l in launches if l["domain"].lower() == choice.lower()]
             if matches:
                 return matches[0]
-            print(f"  '{choice}' not found in the list. Try again.")
+            print(f"  '{choice}' not found. Try again, or type 'all' to snipe every launch.")
+
+
+def pick_amount_for_all(launches: list[dict], usdce_balance: float) -> float:
+    """Ask for a per-launch amount and validate total against balance."""
+    n = len(launches)
+    print(f"  Your USDC.e balance: ${usdce_balance:.4f}")
+    print(f"  Sniping all {n} launch{'es' if n != 1 else ''}.")
+    while True:
+        raw = input("  How much USDC.e per launch? $").strip()
+        try:
+            amount = float(raw)
+        except ValueError:
+            print("  Please enter a number (e.g. 1.00).")
+            continue
+        if amount <= 0:
+            print("  Amount must be greater than 0.")
+            continue
+        total = amount * n
+        if total > usdce_balance:
+            print(f"  Total would be ${total:.2f}  ({n} × ${amount:.2f})  but you only have ${usdce_balance:.4f}.")
+            continue
+        return amount
 
 
 def pick_amount(usdce_balance: float) -> float:
@@ -506,10 +533,14 @@ def run_countdown(launch_dt: datetime, domain: str):
 # ── Core snipe ────────────────────────────────────────────────────────────────
 
 def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
-             launch: dict, amount_usd: float) -> bool:
+             launch: dict, amount_usd: float,
+             tx_lock: threading.Lock | None = None) -> bool:
     """
     Tight-poll loop: query API every POLL_SEC seconds until launchpadAddress
     appears AND launchStatus == 1, then fire the buy.
+
+    tx_lock — optional lock shared across threads so concurrent snipes don't
+               collide on nonce. Only used in 'all' mode.
     """
     domain    = launch["domain"]
     launch_dt = launch["launch_dt"]
@@ -552,34 +583,35 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
             continue
 
         # Status is 1 — FIRE
-        print(f"\n  [{now_s}] ACTIVE! launchpad={launchpad_addr}")
-        print(f"  Executing buy of ${amount_usd:.2f} USDC.e...")
+        print(f"\n  [{now_s}] {bold(domain)} ACTIVE! launchpad={launchpad_addr}")
+        print(f"  Executing buy of ${amount_usd:.2f} USDC.e for {bold(domain)}...")
 
-        gas_price = w3.eth.gas_price
-        ensure_allowance(w3, wallet, private_key, usdce, Web3.to_checksum_address(launchpad_addr), gas_price)
+        # Serialise the approve + nonce + send across concurrent threads
+        with (tx_lock if tx_lock else contextlib.nullcontext()):
+            gas_price = w3.eth.gas_price
+            ensure_allowance(w3, wallet, private_key, usdce, Web3.to_checksum_address(launchpad_addr), gas_price)
 
-        amount_raw = int(amount_usd * 10 ** usdce_decimals)
-        nonce = w3.eth.get_transaction_count(wallet)
-        try:
-            gas_est   = lp.functions.buy(amount_raw, 0).estimate_gas({"from": wallet})
-            gas_limit = int(gas_est * 1.5)
-        except Exception:
-            gas_limit = 300_000
+            amount_raw = int(amount_usd * 10 ** usdce_decimals)
+            nonce = w3.eth.get_transaction_count(wallet, "pending")
+            try:
+                gas_est   = lp.functions.buy(amount_raw, 0).estimate_gas({"from": wallet})
+                gas_limit = int(gas_est * 1.5)
+            except Exception:
+                gas_limit = 300_000
 
-        tx = lp.functions.buy(amount_raw, 0).build_transaction({
-            "from": wallet, "nonce": nonce, "gas": gas_limit,
-            "gasPrice": gas_price, "chainId": CHAIN_ID,
-        })
+            tx = lp.functions.buy(amount_raw, 0).build_transaction({
+                "from": wallet, "nonce": nonce, "gas": gas_limit,
+                "gasPrice": gas_price, "chainId": CHAIN_ID,
+            })
 
-        fire_time = datetime.now(timezone.utc)
-        receipt, tx_hash = send_tx(w3, tx, private_key, "BUY")
+            fire_time = datetime.now(timezone.utc)
+            receipt, tx_hash = send_tx(w3, tx, private_key, "BUY")
 
         elapsed        = (datetime.now(timezone.utc) - fire_time).total_seconds()
         after_schedule = (datetime.now(timezone.utc) - launch_dt).total_seconds()
 
         if receipt.status == 1:
-            print(f"\n  {green_b('✓ BUY CONFIRMED')}")
-            print(f"  Domain        : {bold(domain)}")
+            print(f"\n  {green_b('✓ BUY CONFIRMED')}  {bold(domain)}")
             print(f"  Amount        : {green_b('$' + f'{amount_usd:.2f}')} USDC.e")
             print(f"  Block         : {receipt.blockNumber}")
             print(f"  Confirmed in  : {elapsed:.1f}s")
@@ -589,7 +621,7 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
             print()
             return True
         else:
-            print(f"\n  {red_b('✗ BUY FAILED (status=0)')}")
+            print(f"\n  {red_b('✗ BUY FAILED (status=0)')}  {bold(domain)}")
             print(f"  Explorer: {dim('https://explorer.doma.xyz/tx/' + tx_hash.hex())}")
             return False
 
@@ -642,8 +674,72 @@ def main():
 
     # Display table and pick
     print_table(launches)
-    launch = pick_launch(launches)
+    selection = pick_launch(launches)
 
+    # ── ALL mode ──────────────────────────────────────────────────────────────
+    if selection == "all":
+        print()
+        amount_per = pick_amount_for_all(launches, usdce_balance)
+        total_spend = amount_per * len(launches)
+
+        # Summary box
+        print()
+        print(f"  ┌─────────────────────────────────────────┐")
+        print(f"  │  SNIPE ALL SUMMARY                      │")
+        print(f"  │                                         │")
+        for lx in launches:
+            line = f"{lx['domain'][:20]:<20}  {lx['launch_dt'].strftime('%H:%M UTC')}"
+            print(f"  │    {line:<37}│")
+        print(f"  │                                         │")
+        print(f"  │  Per launch : ${amount_per:<27.2f}│")
+        print(f"  │  Launches   : {len(launches):<27} │")
+        print(f"  │  Total      : {green_b('$' + f'{total_spend:.2f}'):<38}│")
+        print(f"  └─────────────────────────────────────────┘")
+        print()
+        confirm = input("  Confirm? (yes/no): ").strip().lower()
+        if confirm not in ("yes", "y"):
+            print("  Cancelled.")
+            sys.exit(0)
+
+        # Shared lock — serialises approve+nonce+send across threads
+        tx_lock = threading.Lock()
+        results: dict[str, bool] = {}
+
+        def _snipe_one(lx: dict):
+            run_countdown(lx["launch_dt"], lx["domain"])
+            ok = do_snipe(w3, wallet, private_key, usdce, usdce_decimals,
+                          lx, amount_per, tx_lock=tx_lock)
+            results[lx["domain"]] = ok
+
+        threads = [threading.Thread(target=_snipe_one, args=(lx,), daemon=True)
+                   for lx in launches]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Final report
+        print()
+        print(bold("  ── Results ─────────────────────────────────"))
+        wins = 0
+        for lx in launches:
+            ok = results.get(lx["domain"], False)
+            icon = green("  ✓") if ok else red("  ✗")
+            print(f"{icon}  {lx['domain']}")
+            if ok:
+                wins += 1
+        print()
+        if wins == len(launches):
+            print(green_b("  All snipes confirmed! Tokens are in your wallet."))
+        elif wins > 0:
+            print(yellow(f"  {wins}/{len(launches)} snipes confirmed."))
+        else:
+            print(red("  No tokens were purchased."))
+        print(dim("  Monitor your positions at https://doma.xyz"))
+        sys.exit(0 if wins > 0 else 1)
+
+    # ── SINGLE mode ───────────────────────────────────────────────────────────
+    launch = selection
     print(f"\n  Selected: {launch['domain']} — {launch['launch_dt'].strftime('%Y-%m-%d %H:%M UTC')}")
     if launch["initial_fdv"]:
         spread = (launch["bonding_fdv"] / launch["initial_fdv"]) if launch["initial_fdv"] > 0 else 0
