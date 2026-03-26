@@ -22,10 +22,35 @@ import getpass
 import io
 import json
 import os
+import re
 import sys
 import threading
 import time
 from datetime import datetime, timezone, timedelta
+
+import requests
+from dotenv import load_dotenv
+from eth_account import Account
+from web3 import Web3
+
+
+# ── Path helpers (work correctly whether run as .py or PyInstaller .exe) ───────
+
+def _app_dir() -> str:
+    """Directory of the running exe (or script). Keystore/config live here."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def _get_data_dir() -> str:
+    """Directory for bundled read-only data files (frog.txt).
+    When frozen by PyInstaller this is sys._MEIPASS (the temp bundle dir)."""
+    if getattr(sys, "frozen", False):
+        return sys._MEIPASS  # type: ignore[attr-defined]
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+load_dotenv(os.path.join(_app_dir(), ".env"))
 
 # Force UTF-8 output on Windows (handles box-drawing and emoji characters)
 if sys.platform == "win32":
@@ -132,31 +157,6 @@ def _pause(prompt="  Press Enter to continue (Ctrl+C to exit)... "):
     except KeyboardInterrupt:
         print("\n  Exited.")
         sys.exit(0)
-
-import requests
-from dotenv import load_dotenv
-from eth_account import Account
-from web3 import Web3
-
-
-# ── Path helpers (work correctly whether run as .py or PyInstaller .exe) ───────
-
-def _app_dir() -> str:
-    """Directory of the running exe (or script). Keystore/config live here."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-def _get_data_dir() -> str:
-    """Directory for bundled read-only data files (frog.txt).
-    When frozen by PyInstaller this is sys._MEIPASS (the temp bundle dir).
-    When running as a plain .py script it is the same as _app_dir()."""
-    if getattr(sys, "frozen", False):
-        return sys._MEIPASS  # type: ignore[attr-defined]
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-load_dotenv(os.path.join(_app_dir(), ".env"))
 
 # ── Network constants (Doma chain — do not change) ────────────────────────────
 
@@ -276,6 +276,21 @@ def fetch_launches(window_hours: int = 24) -> list[dict]:
 
 # ── Table display ─────────────────────────────────────────────────────────────
 
+_ANSI_RE = re.compile(r'\033\[[0-9;]*m')
+
+def _ansi_len(s: str) -> int:
+    """Visible length of a string, ignoring ANSI colour codes."""
+    return len(_ANSI_RE.sub('', s))
+
+def _pad(s: str, width: int) -> str:
+    """Left-justify s to visible width, accounting for hidden ANSI codes."""
+    return s + ' ' * max(0, width - _ansi_len(s))
+
+def _fmt_amt(amount: float) -> str:
+    """Format a USDC amount cleanly — up to 4 dp, trailing zeros stripped."""
+    return f"{amount:.4f}".rstrip("0").rstrip(".")
+
+
 def print_table(launches: list[dict]):
     if not launches:
         print("\n  No launches found in the next 24 hours. Check back soon!")
@@ -287,7 +302,7 @@ def print_table(launches: list[dict]):
     def fmt_row(*cells):
         parts = []
         for i, cell in enumerate(cells):
-            parts.append(f" {str(cell):<{col_w[i]}} ")
+            parts.append(f" {_pad(str(cell), col_w[i])} ")
         return "  |" + "|".join(parts) + "|"
 
     print(f"\n  Upcoming launches — next 24 hours\n")
@@ -332,7 +347,7 @@ def pick_launch(launches: list[dict]):
                 return launches[idx]
             print(f"  Please enter a number between 1 and {len(launches)}, a domain name, or 'all'.")
         else:
-            matches = [l for l in launches if l["domain"].lower() == choice.lower()]
+            matches = [lx for lx in launches if lx["domain"].lower() == choice.lower()]
             if matches:
                 return matches[0]
             print(f"  '{choice}' not found. Try again, or type 'all' to snipe every launch.")
@@ -355,7 +370,7 @@ def pick_amount_for_all(launches: list[dict], usdce_balance: float) -> float:
             continue
         total = amount * n
         if total > usdce_balance:
-            print(f"  Total would be ${total:.2f}  ({n} × ${amount:.2f})  but you only have ${usdce_balance:.4f}.")
+            print(f"  Total would be ${_fmt_amt(total)}  ({n} x ${_fmt_amt(amount)})  but you only have ${_fmt_amt(usdce_balance)}.")
             continue
         return amount
 
@@ -381,9 +396,16 @@ def pick_amount(usdce_balance: float) -> float:
 # ── Wallet — keystore onboarding & unlock ─────────────────────────────────────
 
 def _account_from_input(key_raw: str):
-    """Parse a private key or seed phrase string into an Account."""
-    key_raw = key_raw.strip()
-    if " " in key_raw:
+    """Parse a private key or seed phrase string into an Account.
+
+    Seed phrase: 12 or 24 words separated by spaces.
+    Private key: 64 hex chars, optionally prefixed with 0x.
+    """
+    # Normalize: strip whitespace and collapse any internal runs of whitespace
+    key_raw = " ".join(key_raw.split())
+    word_count = len(key_raw.split())
+    if word_count >= 12:
+        # Treat as BIP-39 mnemonic seed phrase
         Account.enable_unaudited_hdwallet_features()
         idx = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
         return Account.from_mnemonic(key_raw, account_path=f"m/44'/60'/0'/0/{idx}")
@@ -594,7 +616,7 @@ def ensure_allowance(w3, wallet: str, private_key: str, usdce, spender: str, gas
         return  # Already approved
 
     print("\n  Approving USDC.e for this launchpad (one-time per launch)...")
-    nonce = w3.eth.get_transaction_count(wallet)
+    nonce = w3.eth.get_transaction_count(wallet, "pending")
     try:
         gas_est   = usdce.functions.approve(spender, MAX_UINT256).estimate_gas({"from": wallet})
         gas_limit = int(gas_est * 1.5)
@@ -680,7 +702,8 @@ def run_countdown(launch_dt: datetime, domain: str,
 def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
              launch: dict, amount_usd: float,
              tx_lock: threading.Lock | None = None,
-             stop_event: threading.Event | None = None) -> bool:
+             stop_event: threading.Event | None = None,
+             threaded: bool = False) -> bool:
     """
     Tight-poll loop: query API every POLL_SEC seconds until launchpadAddress
     appears AND launchStatus == 1, then fire the buy.
@@ -688,11 +711,13 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
     tx_lock    — optional lock shared across threads so concurrent snipes
                  don't collide on nonce. Only used in 'all' mode.
     stop_event — if set by Ctrl+C handler, the loop exits immediately.
+    threaded   — prefix poll messages with [domain] for clarity in all mode.
     """
     domain    = launch["domain"]
     launch_dt = launch["launch_dt"]
     give_up   = launch_dt + timedelta(minutes=GIVE_UP_MIN)
     polls     = 0
+    tag       = f"[{domain}] " if threaded else ""
 
     while datetime.now(timezone.utc) < give_up:
         if stop_event and stop_event.is_set():
@@ -703,17 +728,17 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
         token_data = query_token(domain)
 
         if token_data is None:
-            print(f"  [{now_s}] Poll {polls}: not in API yet...", flush=True)
+            print(f"  [{now_s}] {tag}Poll {polls}: not in API yet...", flush=True)
             time.sleep(POLL_SEC)
             continue
 
         if token_data.get("poolAddress"):
-            print(f"\n  [{now_s}] Token already graduated — missed the bonding curve window.")
+            print(f"\n  [{now_s}] {tag}Token already graduated — missed the bonding curve window.")
             return False
 
         launchpad_addr = token_data.get("launchpadAddress")
         if not launchpad_addr:
-            print(f"  [{now_s}] Poll {polls}: found in API, waiting for launchpadAddress...", flush=True)
+            print(f"  [{now_s}] {tag}Poll {polls}: found in API, waiting for launchpadAddress...", flush=True)
             time.sleep(POLL_SEC)
             continue
 
@@ -722,18 +747,18 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
             lp = w3.eth.contract(address=Web3.to_checksum_address(launchpad_addr), abi=LAUNCHPAD_ABI)
             status = lp.functions.launchStatus().call()
         except Exception as e:
-            print(f"  [{now_s}] Poll {polls}: status check failed ({e}), retrying...", flush=True)
+            print(f"  [{now_s}] {tag}Poll {polls}: status check failed ({e}), retrying...", flush=True)
             time.sleep(POLL_SEC)
             continue
 
         if status != 1:
-            print(f"  [{now_s}] Poll {polls}: launchpad found, waiting for active (status={status})...", flush=True)
+            print(f"  [{now_s}] {tag}Poll {polls}: launchpad found, waiting for active (status={status})...", flush=True)
             time.sleep(POLL_SEC)
             continue
 
         # Status is 1 — FIRE
         print(f"\n  [{now_s}] {bold(domain)} ACTIVE! launchpad={launchpad_addr}")
-        print(f"  Executing buy of ${amount_usd:.2f} USDC.e for {bold(domain)}...")
+        print(f"  Executing buy of ${_fmt_amt(amount_usd)} USDC.e for {bold(domain)}...")
 
         # Serialise the approve + nonce + send across concurrent threads
         with (tx_lock if tx_lock else contextlib.nullcontext()):
@@ -854,9 +879,9 @@ def main():
             line = f"{lx['domain'][:20]:<20}  {lx['launch_dt'].strftime('%H:%M UTC')}"
             print(f"  │    {line:<37}│")
         print(f"  │                                         │")
-        print(f"  │  Per launch : ${amount_per:<27.2f}│")
+        print(f"  │  Per launch : {_pad('$' + _fmt_amt(amount_per), 27)}│")
         print(f"  │  Launches   : {len(launches):<27} │")
-        print(f"  │  Total      : {green_b('$' + f'{total_spend:.2f}'):<38}│")
+        print(f"  │  Total      : {_pad(green_b('$' + _fmt_amt(total_spend)), 27)}│")
         print(f"  └─────────────────────────────────────────┘")
         print()
         confirm = input("  Confirm? (yes/no): ").strip().lower()
@@ -875,7 +900,7 @@ def main():
             if stop_event.is_set():
                 return
             ok = do_snipe(w3, wallet, private_key, usdce, usdce_decimals,
-                          lx, amount_per, tx_lock=tx_lock, stop_event=stop_event)
+                          lx, amount_per, tx_lock=tx_lock, stop_event=stop_event, threaded=True)
             results[lx["domain"]] = ok
             still_running = sum(1 for t in threads if t.is_alive()) - 1
             if still_running > 0:
@@ -940,7 +965,7 @@ def main():
     print(f"  │                                         │")
     print(f"  │  Domain  : {launch['domain']:<29} │")
     print(f"  │  Launch  : {launch['launch_dt'].strftime('%H:%M UTC'):<29} │")
-    print(f"  │  Amount  : ${amount_usd:<28.2f} │")
+    print(f"  │  Amount  : {_pad('$' + _fmt_amt(amount_usd), 29)} │")
     print(f"  └─────────────────────────────────────────┘")
     print()
     confirm = input("  Confirm? (yes/no): ").strip().lower()
