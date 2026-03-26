@@ -24,6 +24,11 @@ dist/
 build/
 *.egg-info/
 
+# PyInstaller
+*.spec
+release/DomaSniper.exe
+release/DomaSniper-win64.zip
+
 # Logs
 *.log
 logs/

@@ -55,7 +55,7 @@ def red_b(t):   return _c("1;31", t)
 
 def _load_frog() -> list[str]:
     """Load frog.txt from the script's directory, crop and colorize each line."""
-    frog_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frog.txt")
+    frog_path = os.path.join(_get_data_dir(), "frog.txt")
     try:
         with open(frog_path, encoding="utf-8", errors="replace") as f:
             raw = f.read().splitlines()
@@ -138,7 +138,25 @@ from dotenv import load_dotenv
 from eth_account import Account
 from web3 import Web3
 
-load_dotenv()
+
+# ── Path helpers (work correctly whether run as .py or PyInstaller .exe) ───────
+
+def _app_dir() -> str:
+    """Directory of the running exe (or script). Keystore/config live here."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def _get_data_dir() -> str:
+    """Directory for bundled read-only data files (frog.txt).
+    When frozen by PyInstaller this is sys._MEIPASS (the temp bundle dir).
+    When running as a plain .py script it is the same as _app_dir()."""
+    if getattr(sys, "frozen", False):
+        return sys._MEIPASS  # type: ignore[attr-defined]
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+load_dotenv(os.path.join(_app_dir(), ".env"))
 
 # ── Network constants (Doma chain — do not change) ────────────────────────────
 
@@ -153,7 +171,7 @@ PRELOAD_SEC   = 120   # Start tight-polling 2 minutes before scheduled launch
 POLL_SEC      = 3     # Poll API every 3 seconds during tight window
 GIVE_UP_MIN   = 15    # Give up if token has not gone live 15 minutes after schedule
 MAX_UINT256   = 2 ** 256 - 1
-KEYSTORE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keystore.json")
+KEYSTORE_PATH = os.path.join(_app_dir(), "keystore.json")
 
 # ── ABIs ──────────────────────────────────────────────────────────────────────
 
