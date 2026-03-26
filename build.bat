@@ -40,7 +40,7 @@ if errorlevel 1 (
 
 :: Step 3: Build the exe
 echo  [2/4] Building DomaSniper.exe (this takes about 60 seconds)...
-pyinstaller --onefile --console --name DomaSniper --add-data "frog.txt;." --clean --noconfirm snipe.py
+pyinstaller --onefile --console --name DomaSniper --add-data "frog.txt;." --collect-data mnemonic --collect-data eth_account --clean --noconfirm snipe.py
 if errorlevel 1 (
     echo.
     echo  ERROR: PyInstaller build failed. See output above.
