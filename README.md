@@ -30,7 +30,26 @@ You will need:
 
 ## Installation
 
-### Step 1 — Install Python
+There are two ways to run the bot. Pick whichever suits you.
+
+---
+
+### Option A — Windows EXE (easiest — no Python required)
+
+1. Go to the [Releases page](https://github.com/sdmikecfc/trading-bot/releases)
+2. Download **`DomaSniper-win64.zip`**
+3. Unzip it anywhere (e.g. your Desktop)
+4. Double-click **`DomaSniper.exe`**
+
+> **Windows SmartScreen warning?** This is normal for unsigned software. Click **"More info"** then **"Run anyway"**. The source code is fully open — you can read every line above.
+
+That's it. Skip to [First Run — Wallet Setup](#first-run--wallet-setup).
+
+---
+
+### Option B — Run from Source (Windows / Mac / Linux)
+
+#### Step 1 — Install Python
 
 Python is the programming language this bot runs on. You only need to do this once.
 
@@ -57,55 +76,36 @@ python --version
 ```
 You should see something like `Python 3.12.0`. Anything 3.11 or higher is fine.
 
----
+#### Step 2 — Download the Bot
 
-### Step 2 — Download the Bot
-
-**Option A — Git (recommended)**
-
-If you have Git installed:
+**Git**
 ```bash
 git clone https://github.com/sdmikecfc/trading-bot.git
 cd trading-bot
 ```
 
-**Option B — Download ZIP**
+**Download ZIP**
 1. Click the green **Code** button at the top of this page
 2. Click **Download ZIP**
 3. Unzip it somewhere easy to find (e.g. your Desktop)
 4. Open a terminal in that folder
 
----
+#### Step 3 — Install Dependencies
 
-### Step 3 — Install Dependencies
-
-In your terminal, inside the trading-bot folder:
-
-**Windows / Mac / Linux**
 ```bash
 pip install -r requirements.txt
 ```
 
-If `pip` isn't recognised on Mac/Linux, try:
-```bash
-pip3 install -r requirements.txt
-```
+If `pip` isn't recognised on Mac/Linux, try `pip3` instead.
 
----
-
-### Step 4 — Run the Bot
+#### Step 4 — Run the Bot
 
 **Windows — easiest way:**
-Double-click `launch.bat` in the trading-bot folder. It checks everything and launches the bot automatically.
+Double-click `launch.bat`. It checks everything and launches the bot automatically.
 
 **Windows (terminal) / Mac / Linux:**
 ```bash
 python snipe.py
-```
-
-On Mac/Linux if that doesn't work:
-```bash
-python3 snipe.py
 ```
 
 ---
@@ -196,6 +196,7 @@ python schedule_sniper.py
 
 - **Encrypted keystore** — your key is stored AES-256 encrypted (the same standard MetaMask uses). Nobody can open it without your password.
 - **Key never transmitted** — all signing happens locally on your machine. Nothing is sent to any external server.
+- **Open source** — every line of code is here on GitHub for anyone to inspect.
 - **`keystore.json` is blocked from Git** — it cannot be accidentally uploaded to GitHub.
 - **Dedicated wallet** — only fund it with what you plan to trade. Move tokens to your main wallet any time after purchase.
 
@@ -219,4 +220,5 @@ This software is provided for educational purposes. Cryptocurrency trading invol
 - [Doma Explorer](https://explorer.doma.xyz)
 - [web3guides.com — Doma Guides](https://web3guides.com/doma)
 - [Doma Discord](https://discord.gg/doma)
+- [Releases — Download EXE](https://github.com/sdmikecfc/trading-bot/releases)
 - [GitHub Issues](https://github.com/sdmikecfc/trading-bot/issues)
