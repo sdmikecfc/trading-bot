@@ -39,3 +39,9 @@ Thumbs.db
 
 # Claude Code internal files
 .claude/
+
+# Runtime state files — contain position/trade data, never commit
+positions.json
+scheduled_snipes.json
+seen_tokens.json
+tokens.json
