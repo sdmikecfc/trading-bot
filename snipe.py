@@ -410,10 +410,12 @@ def _account_from_key(key: str):
 
 def _prompt_credential() -> tuple:
     """
-    Ask the user whether they have a private key or seed phrase,
-    then prompt for it separately. Returns (account, raw_input).
-    Avoids relying on space-detection inside getpass which can drop
-    spaces on some Windows terminals.
+    Ask whether the user has a private key or seed phrase, read it with
+    input() (visible), then immediately clear the screen so it isn't left
+    on display. Returns (account, raw_input).
+
+    getpass is intentionally NOT used here — it reads mask characters
+    instead of real input inside a PyInstaller exe on Windows.
     """
     print("  Do you have a:")
     print(f"    {bold('1')}  Private key  (64-character hex string)")
@@ -425,24 +427,43 @@ def _prompt_credential() -> tuple:
         except KeyboardInterrupt:
             print("\n  Exited.")
             sys.exit(0)
+
         if choice == "1":
+            print()
+            print(yellow("  Your key will be visible as you type/paste."))
+            print(dim   ("  The screen clears immediately after — encrypt first, look away if needed."))
+            print()
             try:
-                key_raw = getpass.getpass("  Paste your private key (hidden): ")
+                key_raw = input("  Private key: ").strip()
             except KeyboardInterrupt:
                 print("\n  Exited.")
                 sys.exit(0)
-            return _account_from_key(key_raw), key_raw
+            if not key_raw:
+                print("  Nothing entered — try again.\n")
+                continue
+            acct = _account_from_key(key_raw)
+            os.system("cls" if os.name == "nt" else "clear")
+            _print_compact_header()
+            return acct, key_raw
+
         elif choice == "2":
             print()
-            print(dim("  Type or paste your 12 or 24 seed words, separated by spaces."))
-            print(dim("  Input is hidden — nothing will show as you type."))
+            print(yellow("  Your phrase will be visible as you type/paste."))
+            print(dim   ("  The screen clears immediately after — encrypt first, look away if needed."))
             print()
             try:
-                phrase = getpass.getpass("  Seed phrase (hidden): ")
+                phrase = input("  Seed phrase: ").strip()
             except KeyboardInterrupt:
                 print("\n  Exited.")
                 sys.exit(0)
-            return _account_from_mnemonic(phrase), phrase
+            if not phrase:
+                print("  Nothing entered — try again.\n")
+                continue
+            acct = _account_from_mnemonic(phrase)
+            os.system("cls" if os.name == "nt" else "clear")
+            _print_compact_header()
+            return acct, phrase
+
         else:
             print("  Please enter 1 or 2.\n")
 
