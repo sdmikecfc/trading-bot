@@ -69,15 +69,19 @@ def _load_frog() -> list[str]:
         colored = []
         for ch in line:
             if ch == "$":
-                colored.append(" ")          # invisible background
+                colored.append(" ")           # invisible background
             elif ch in "@B%8":
-                colored.append(green_b(ch))  # bright green — main body/outline
+                colored.append(green_b(ch))   # bright green — body outline
             elif ch in "WM&#hak":
-                colored.append(green(ch))    # regular green — mid body
+                colored.append(green(ch))     # green — mid body
             elif ch in "dpqwmZOQL0CUY":
-                colored.append(yellow(ch))   # yellow — texture/fill
+                colored.append(yellow(ch))    # yellow — body texture / fill
+            elif ch in "Il!;":
+                colored.append(bold(ch))      # bold white — teeth / bright highlights
+            elif ch in r"\/:":
+                colored.append(cyan(ch))      # cyan — shine / specular
             else:
-                colored.append(dim(ch))      # dim — fine detail
+                colored.append(ch)            # normal brightness — face detail, shading chars
         lines.append("".join(colored))
     return lines
 
