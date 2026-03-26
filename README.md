@@ -21,8 +21,8 @@ Doma Protocol lets users fractionalize domain names into ERC-20 tokens. Each tok
 You will need:
 
 - **A dedicated wallet** — create a brand new one in MetaMask or Rabby just for this. Never use your main wallet.
-- **USDC.e on Doma chain** — bridge via [Across Protocol](https://across.to) or [Optimism Superbridge](https://superbridge.app)
-- **A tiny amount of ETH on Doma chain** — for gas. Keep at least 0.01 ETH. Gas is nearly free on Doma chain.
+- **USDC.e on Doma chain** — bridge via [Relay](https://relay.link/bridge) or [Stargate Finance](https://stargate.finance/?srcChain=ethereum&srcToken=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&dstChain=doma&dstToken=0x31EEf89D5215C305304a2fA5376a1f1b6C5dc477)
+- **A tiny amount of ETH on Doma chain** — for gas. Keep at least 0.001 ETH. Gas is nearly free on Doma chain.
 
 > Not sure how to bridge? Ask in the [Doma Discord](https://discord.gg/doma) — the community is helpful.
 
