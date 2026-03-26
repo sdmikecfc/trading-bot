@@ -602,18 +602,41 @@ def ensure_allowance(w3, wallet: str, private_key: str, usdce, spender: str, gas
 
 # ── Countdown ─────────────────────────────────────────────────────────────────
 
-def run_countdown(launch_dt: datetime, domain: str):
-    """Display a live countdown until PRELOAD_SEC seconds before launch."""
+def run_countdown(launch_dt: datetime, domain: str,
+                  threaded: bool = False,
+                  stop_event: threading.Event | None = None):
+    """
+    Wait until PRELOAD_SEC seconds before launch.
+
+    threaded=True  — used in 'all' mode. Prints a single status line
+                     instead of a live \r countdown (multiple threads
+                     writing \r simultaneously garbles the terminal).
+    stop_event     — if set, the loop exits immediately so the thread
+                     can shut down on Ctrl+C.
+    """
     preload_time = launch_dt - timedelta(seconds=PRELOAD_SEC)
     now = datetime.now(timezone.utc)
 
     if preload_time <= now:
-        print(f"\n  Already within preload window — starting poll now...")
+        print(f"  [{domain}] Already within preload window — polling now...")
         return
 
+    if threaded:
+        remaining   = launch_dt - now
+        total_secs  = int(remaining.total_seconds())
+        h, rem      = divmod(total_secs, 3600)
+        m, _        = divmod(rem, 60)
+        print(f"  [{domain}] Waiting — launch at {launch_dt.strftime('%H:%M UTC')}  ({h:02d}h {m:02d}m)", flush=True)
+        while datetime.now(timezone.utc) < preload_time:
+            if stop_event and stop_event.is_set():
+                return
+            time.sleep(5)
+        print(f"  [{domain}] Entering poll window...", flush=True)
+        return
+
+    # Single-launch mode — live countdown
     print(f"\n  Waiting for {domain} to go live at {launch_dt.strftime('%H:%M UTC')}")
     print("  Press Ctrl+C to cancel.\n")
-
     try:
         while True:
             now = datetime.now(timezone.utc)
@@ -636,13 +659,15 @@ def run_countdown(launch_dt: datetime, domain: str):
 
 def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
              launch: dict, amount_usd: float,
-             tx_lock: threading.Lock | None = None) -> bool:
+             tx_lock: threading.Lock | None = None,
+             stop_event: threading.Event | None = None) -> bool:
     """
     Tight-poll loop: query API every POLL_SEC seconds until launchpadAddress
     appears AND launchStatus == 1, then fire the buy.
 
-    tx_lock — optional lock shared across threads so concurrent snipes don't
-               collide on nonce. Only used in 'all' mode.
+    tx_lock    — optional lock shared across threads so concurrent snipes
+                 don't collide on nonce. Only used in 'all' mode.
+    stop_event — if set by Ctrl+C handler, the loop exits immediately.
     """
     domain    = launch["domain"]
     launch_dt = launch["launch_dt"]
@@ -650,6 +675,8 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
     polls     = 0
 
     while datetime.now(timezone.utc) < give_up:
+        if stop_event and stop_event.is_set():
+            return False
         polls += 1
         now_s = datetime.now(timezone.utc).strftime("%H:%M:%S")
 
@@ -812,22 +839,37 @@ def main():
             print("  Cancelled.")
             sys.exit(0)
 
-        # Shared lock — serialises approve+nonce+send across threads
-        tx_lock = threading.Lock()
+        # Shared primitives for all threads
+        tx_lock    = threading.Lock()   # serialises approve+nonce+send
+        stop_event = threading.Event()  # set on Ctrl+C to kill threads
         results: dict[str, bool] = {}
 
         def _snipe_one(lx: dict):
-            run_countdown(lx["launch_dt"], lx["domain"])
+            run_countdown(lx["launch_dt"], lx["domain"],
+                          threaded=True, stop_event=stop_event)
+            if stop_event.is_set():
+                return
             ok = do_snipe(w3, wallet, private_key, usdce, usdce_decimals,
-                          lx, amount_per, tx_lock=tx_lock)
+                          lx, amount_per, tx_lock=tx_lock, stop_event=stop_event)
             results[lx["domain"]] = ok
 
         threads = [threading.Thread(target=_snipe_one, args=(lx,), daemon=True)
                    for lx in launches]
+        print()
         for t in threads:
             t.start()
-        for t in threads:
-            t.join()
+
+        print(dim("  Running — press Ctrl+C to cancel all.\n"))
+        try:
+            for t in threads:
+                t.join()
+        except KeyboardInterrupt:
+            print(f"\n\n  {yellow('Stopping all snipes...')}")
+            stop_event.set()
+            for t in threads:
+                t.join(timeout=10)
+            print("  Stopped.")
+            sys.exit(0)
 
         # Final report
         print()
