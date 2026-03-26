@@ -110,6 +110,8 @@ def _print_banner():
     for line in frog_lines:
         print(line)
     print()
+    print("  " + yellow("♥ Support Big Mike — buy ") + green_b("$web3guides.com") + yellow(" at ") + cyan("app.doma.xyz/domain/web3guides.com"))
+    print()
 
 
 def _print_compact_header():
