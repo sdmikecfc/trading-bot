@@ -865,8 +865,11 @@ def main():
 
         print(dim("  Running — press Ctrl+C to cancel all.\n"))
         try:
-            for t in threads:
-                t.join()
+            # Join with a short timeout so the main thread wakes up regularly
+            # and can catch Ctrl+C — plain t.join() blocks signals on Windows.
+            while any(t.is_alive() for t in threads):
+                for t in threads:
+                    t.join(timeout=0.5)
         except KeyboardInterrupt:
             print(f"\n\n  {yellow('Stopping all snipes...')}")
             stop_event.set()
