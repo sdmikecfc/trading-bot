@@ -2,7 +2,7 @@
 
 Automatically snipes token launches on the [Doma Protocol](https://doma.xyz) bonding curve — buying at the floor price the instant a token goes live.
 
-Built and maintained by [@web3guides](https://web3guides.com) · [web3guides.com/doma](https://web3guides.com/doma) · [discord.gg/doma](https://discord.gg/doma)
+Built and maintained by [@web3guides](https://web3guides.com) · Big Mike @sdmikecfc in Discord
 
 ---
 
