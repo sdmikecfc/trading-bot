@@ -395,21 +395,56 @@ def pick_amount(usdce_balance: float) -> float:
 
 # ── Wallet — keystore onboarding & unlock ─────────────────────────────────────
 
-def _account_from_input(key_raw: str):
-    """Parse a private key or seed phrase string into an Account.
+def _account_from_mnemonic(phrase: str):
+    """Derive an account from a BIP-39 seed phrase."""
+    phrase = " ".join(phrase.split())   # normalise whitespace
+    Account.enable_unaudited_hdwallet_features()
+    idx = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
+    return Account.from_mnemonic(phrase, account_path=f"m/44'/60'/0'/0/{idx}")
 
-    Seed phrase: 12 or 24 words separated by spaces.
-    Private key: 64 hex chars, optionally prefixed with 0x.
+
+def _account_from_key(key: str):
+    """Derive an account from a raw private key (hex, optional 0x prefix)."""
+    return Account.from_key(key.strip())
+
+
+def _prompt_credential() -> tuple:
     """
-    # Normalize: strip whitespace and collapse any internal runs of whitespace
-    key_raw = " ".join(key_raw.split())
-    word_count = len(key_raw.split())
-    if word_count >= 12:
-        # Treat as BIP-39 mnemonic seed phrase
-        Account.enable_unaudited_hdwallet_features()
-        idx = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
-        return Account.from_mnemonic(key_raw, account_path=f"m/44'/60'/0'/0/{idx}")
-    return Account.from_key(key_raw)
+    Ask the user whether they have a private key or seed phrase,
+    then prompt for it separately. Returns (account, raw_input).
+    Avoids relying on space-detection inside getpass which can drop
+    spaces on some Windows terminals.
+    """
+    print("  Do you have a:")
+    print(f"    {bold('1')}  Private key  (64-character hex string)")
+    print(f"    {bold('2')}  Seed phrase  (12 or 24 words)")
+    print()
+    while True:
+        try:
+            choice = input("  Enter 1 or 2: ").strip()
+        except KeyboardInterrupt:
+            print("\n  Exited.")
+            sys.exit(0)
+        if choice == "1":
+            try:
+                key_raw = getpass.getpass("  Paste your private key (hidden): ")
+            except KeyboardInterrupt:
+                print("\n  Exited.")
+                sys.exit(0)
+            return _account_from_key(key_raw), key_raw
+        elif choice == "2":
+            print()
+            print(dim("  Type or paste your 12 or 24 seed words, separated by spaces."))
+            print(dim("  Input is hidden — nothing will show as you type."))
+            print()
+            try:
+                phrase = getpass.getpass("  Seed phrase (hidden): ")
+            except KeyboardInterrupt:
+                print("\n  Exited.")
+                sys.exit(0)
+            return _account_from_mnemonic(phrase), phrase
+        else:
+            print("  Please enter 1 or 2.\n")
 
 
 def first_run_onboarding() -> tuple[str, str]:
@@ -468,16 +503,11 @@ def first_run_onboarding() -> tuple[str, str]:
     # Get and validate key / seed phrase
     while True:
         try:
-            key_raw = getpass.getpass("  Paste your private key or seed phrase (hidden): ")
+            acct, _ = _prompt_credential()
+            break
         except KeyboardInterrupt:
             print("\n  Exited.")
             sys.exit(0)
-        if not key_raw.strip():
-            print("  Nothing entered — try again.\n")
-            continue
-        try:
-            acct = _account_from_input(key_raw)
-            break
         except Exception as e:
             print(f"\n  {red('Invalid key or phrase:')} {e}")
             print("  Double-check it and try again.\n")
@@ -552,7 +582,7 @@ def load_wallet() -> tuple[str, str]:
     private_key = os.getenv("PRIVATE_KEY", "").strip()
     if mnemonic or private_key:
         try:
-            acct = _account_from_input(mnemonic if mnemonic else private_key)
+            acct = _account_from_mnemonic(mnemonic) if mnemonic else _account_from_key(private_key)
             print(yellow("  Note: using credentials from .env."))
             print(dim   ("  Run snipe.py once with no .env key set to create a keystore."))
             print()
