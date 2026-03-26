@@ -752,23 +752,12 @@ def run_countdown(launch_dt: datetime, domain: str,
         return
 
     if threaded:
-        remaining   = launch_dt - now
-        total_secs  = int(remaining.total_seconds())
-        h, rem      = divmod(total_secs, 3600)
-        m, _        = divmod(rem, 60)
-        print(f"  [{domain}] Waiting — launch at {launch_dt.strftime('%H:%M UTC')}  ({h:02d}h {m:02d}m)", flush=True)
-        last_print  = time.time()
+        # Threaded mode: just sleep until the preload window.
+        # The main thread prints consolidated status updates — no per-thread spam.
         while datetime.now(timezone.utc) < preload_time:
             if stop_event and stop_event.is_set():
                 return
             time.sleep(5)
-            if time.time() - last_print >= 60:
-                remaining  = launch_dt - datetime.now(timezone.utc)
-                total_secs = max(0, int(remaining.total_seconds()))
-                h, rem     = divmod(total_secs, 3600)
-                m, _       = divmod(rem, 60)
-                print(f"  [{domain}] Still waiting — {h:02d}h {m:02d}m until launch", flush=True)
-                last_print = time.time()
         print(f"  [{domain}] Entering poll window...", flush=True)
         return
 
@@ -1009,12 +998,23 @@ def main():
             t.start()
 
         print(dim("  Running — press Ctrl+C to cancel all.\n"))
+        last_status = time.time()
         try:
-            # Join with a short timeout so the main thread wakes up regularly
-            # and can catch Ctrl+C — plain t.join() blocks signals on Windows.
             while any(t.is_alive() for t in threads):
                 for t in threads:
                     t.join(timeout=0.5)
+                if time.time() - last_status >= 60:
+                    now_utc = datetime.now(timezone.utc)
+                    pending = [lx for lx in launches if lx["domain"] not in results]
+                    if pending:
+                        print(f"\n  {dim('── Refreshing list ─────────────────── ' + now_utc.strftime('%H:%M UTC'))}")
+                        for lx in pending:
+                            secs = max(0, int((lx["launch_dt"] - now_utc).total_seconds()))
+                            h, rem = divmod(secs, 3600)
+                            m, _   = divmod(rem, 60)
+                            print(f"  {lx['domain']:<32} {h:02d}h {m:02d}m until launch")
+                        print()
+                    last_status = time.time()
         except KeyboardInterrupt:
             print(f"\n\n  {yellow('Stopping all snipes...')}")
             stop_event.set()
