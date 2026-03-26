@@ -639,10 +639,18 @@ def run_countdown(launch_dt: datetime, domain: str,
         h, rem      = divmod(total_secs, 3600)
         m, _        = divmod(rem, 60)
         print(f"  [{domain}] Waiting — launch at {launch_dt.strftime('%H:%M UTC')}  ({h:02d}h {m:02d}m)", flush=True)
+        last_print  = time.time()
         while datetime.now(timezone.utc) < preload_time:
             if stop_event and stop_event.is_set():
                 return
             time.sleep(5)
+            if time.time() - last_print >= 60:
+                remaining  = launch_dt - datetime.now(timezone.utc)
+                total_secs = max(0, int(remaining.total_seconds()))
+                h, rem     = divmod(total_secs, 3600)
+                m, _       = divmod(rem, 60)
+                print(f"  [{domain}] Still waiting — {h:02d}h {m:02d}m until launch", flush=True)
+                last_print = time.time()
         print(f"  [{domain}] Entering poll window...", flush=True)
         return
 
@@ -868,6 +876,9 @@ def main():
             ok = do_snipe(w3, wallet, private_key, usdce, usdce_decimals,
                           lx, amount_per, tx_lock=tx_lock, stop_event=stop_event)
             results[lx["domain"]] = ok
+            still_running = sum(1 for t in threads if t.is_alive()) - 1
+            if still_running > 0:
+                print(f"  [{lx['domain']}] {'Done' if ok else 'Failed'} — {still_running} other launch{'es' if still_running != 1 else ''} still running.", flush=True)
 
         threads = [threading.Thread(target=_snipe_one, args=(lx,), daemon=True)
                    for lx in launches]
