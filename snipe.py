@@ -396,11 +396,36 @@ def pick_amount(usdce_balance: float) -> float:
 # ── Wallet — keystore onboarding & unlock ─────────────────────────────────────
 
 def _account_from_mnemonic(phrase: str):
-    """Derive an account from a BIP-39 seed phrase."""
-    phrase = " ".join(phrase.split())   # normalise whitespace
+    """Derive an Ethereum account from a BIP-39 seed phrase.
+
+    In a PyInstaller exe the mnemonic package cannot find its wordlist
+    files, causing 'Language not detected' errors. We work around this by
+    deriving the BIP39 seed ourselves with stdlib hashlib (no wordlist
+    files needed at all), then using eth_account's internal BIP32 HDKey
+    for the m/44'/60'/0'/0/N derivation.
+    """
+    import hashlib
+    phrase = " ".join(phrase.split())
+    idx   = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
+    path  = f"m/44'/60'/0'/0/{idx}"
     Account.enable_unaudited_hdwallet_features()
-    idx = int(os.getenv("MNEMONIC_ACCOUNT_INDEX", "0"))
-    return Account.from_mnemonic(phrase, account_path=f"m/44'/60'/0'/0/{idx}")
+
+    # BIP-39: convert mnemonic → 64-byte seed via PBKDF2-HMAC-SHA512.
+    # This step does NOT require the wordlist — only the derivation step below does.
+    seed = hashlib.pbkdf2_hmac(
+        "sha512",
+        phrase.encode("utf-8"),
+        b"mnemonic",   # BIP-39 salt prefix (no extra passphrase)
+        2048,
+        dklen=64,
+    )
+
+    # BIP-32/44: derive the private key from the seed.
+    # eth_account.hdaccount.hdkey is available whenever the HD wallet
+    # feature is enabled — no additional data files required.
+    from eth_account.hdaccount.hdkey import HDKey
+    private_key = HDKey.from_seed(seed).derive(path).private_key
+    return Account.from_key(private_key)
 
 
 def _account_from_key(key: str):
