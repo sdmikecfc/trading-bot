@@ -50,6 +50,10 @@ if errorlevel 1 (
 
 :: Step 4: Package the release zip
 echo  [3/4] Packaging release zip...
+
+:: Kill any running instance so Windows releases the file lock
+taskkill /f /im DomaSniper.exe >nul 2>&1
+
 if not exist "release" mkdir release
 copy /y "dist\DomaSniper.exe" "release\DomaSniper.exe" >nul
 copy /y "release_README.txt" "release\README.txt" >nul
