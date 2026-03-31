@@ -788,7 +788,8 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
              launch: dict, amount_usd: float,
              tx_lock: threading.Lock | None = None,
              stop_event: threading.Event | None = None,
-             threaded: bool = False) -> bool:
+             threaded: bool = False,
+             first_only: bool = False) -> bool:
     """
     Tight-poll loop: query API every POLL_SEC seconds until launchpadAddress
     appears AND launchStatus == 1, then fire the buy.
@@ -844,6 +845,16 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
         # Status is 1 — FIRE
         print(f"\n  [{now_s}] {bold(domain)} ACTIVE! launchpad={launchpad_addr}")
         print(f"  Executing buy of ${_fmt_amt(amount_usd)} USDC.e for {bold(domain)}...")
+
+        # First-only check: skip if someone has already bought in
+        if first_only:
+            try:
+                curve_bal = usdce.functions.balanceOf(Web3.to_checksum_address(launchpad_addr)).call()
+                if curve_bal > 0:
+                    print(f"\n  {yellow('⚠ Not first')}  {bold(domain)} — someone already bought in. Skipping.")
+                    return False
+            except Exception:
+                pass  # Can't confirm — proceed anyway
 
         # Serialise the approve + nonce + send across concurrent threads
         with (tx_lock if tx_lock else contextlib.nullcontext()):
@@ -975,6 +986,15 @@ def main():
             print("  Cancelled.")
             sys.exit(0)
 
+        print()
+        print(f"  {bold('Buy even if not the first?')}")
+        print(f"  If someone beats you to a launch, should the bot still buy quickly?")
+        print(f"  Saying no means it will skip any launch where you're not first.")
+        print()
+        first_raw  = input("  Still buy if not first? (yes/no): ").strip().lower()
+        first_only = first_raw not in ("yes", "y")
+        print()
+
         # Shared primitives for all threads
         tx_lock    = threading.Lock()   # serialises approve+nonce+send
         stop_event = threading.Event()  # set on Ctrl+C to kill threads
@@ -986,7 +1006,8 @@ def main():
             if stop_event.is_set():
                 return
             ok = do_snipe(w3, wallet, private_key, usdce, usdce_decimals,
-                          lx, amount_per, tx_lock=tx_lock, stop_event=stop_event, threaded=True)
+                          lx, amount_per, tx_lock=tx_lock, stop_event=stop_event,
+                          threaded=True, first_only=first_only)
             results[lx["domain"]] = ok
             still_running = sum(1 for t in threads if t.is_alive()) - 1
             if still_running > 0:
@@ -1070,9 +1091,18 @@ def main():
         print("  Cancelled.")
         sys.exit(0)
 
+    print()
+    print(f"  {bold('Buy even if not the first?')}")
+    print(f"  If someone beats you to it, should the bot still buy quickly?")
+    print(f"  Saying no means it will skip if you're not first.")
+    print()
+    first_raw = input("  Still buy if not first? (yes/no): ").strip().lower()
+    first_only = first_raw not in ("yes", "y")
+
     # Countdown then snipe
     run_countdown(launch["launch_dt"], launch["domain"])
-    success = do_snipe(w3, wallet, private_key, usdce, usdce_decimals, launch, amount_usd)
+    success = do_snipe(w3, wallet, private_key, usdce, usdce_decimals, launch, amount_usd,
+                       first_only=first_only)
 
     if success:
         print(green_b("  Your tokens are in your wallet."))
