@@ -167,8 +167,8 @@ RPC_URL    = os.getenv("RPC_URL", "https://rpc.doma.xyz")
 CHAIN_ID   = int(os.getenv("CHAIN_ID", "97477"))
 USDCE_ADDR = os.getenv("USDCE_ADDRESS", "0x31EEf89D5215C305304a2fA5376a1f1b6C5dc477")
 
-PRELOAD_SEC   = 120   # Start tight-polling 2 minutes before scheduled launch
-POLL_SEC      = 3     # Poll API every 3 seconds during tight window
+PRELOAD_SEC   = 300   # Start tight-polling 5 minutes before scheduled launch (catches early launches)
+POLL_SEC      = 1     # Poll API every 1 second during tight window
 GIVE_UP_MIN   = 15    # Give up if token has not gone live 15 minutes after schedule
 MAX_UINT256   = 2 ** 256 - 1
 KEYSTORE_PATH = os.path.join(_app_dir(), "keystore.json")
@@ -847,7 +847,7 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
 
         # Serialise the approve + nonce + send across concurrent threads
         with (tx_lock if tx_lock else contextlib.nullcontext()):
-            gas_price = w3.eth.gas_price
+            gas_price = int(w3.eth.gas_price * 1.5)   # 1.5x to prioritise tx on competitive launches
             ensure_allowance(w3, wallet, private_key, usdce, Web3.to_checksum_address(launchpad_addr), gas_price)
 
             amount_raw = int(amount_usd * 10 ** usdce_decimals)
@@ -881,9 +881,10 @@ def do_snipe(w3, wallet: str, private_key: str, usdce, usdce_decimals: int,
             print()
             return True
         else:
-            print(f"\n  {red_b('✗ BUY FAILED (status=0)')}  {bold(domain)}")
+            print(f"\n  {red('✗ tx failed (status=0)')}  {bold(domain)} — retrying...")
             print(f"  Explorer: {dim('https://explorer.doma.xyz/tx/' + tx_hash.hex())}")
-            return False
+            time.sleep(POLL_SEC)
+            continue
 
     print(f"\n  Gave up waiting — {domain} did not go live within {GIVE_UP_MIN} minutes of schedule.")
     return False
