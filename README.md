@@ -1,3 +1,17 @@
+> ## OUTDATED — use [`doma-auto-sniper`](https://github.com/sdmikecfc/doma-auto-sniper) instead
+>
+> This repo is the older interactive sniper with a terminal UI and keystore wizard — fine as an introduction, but **not** the strategy currently running in production.
+>
+> The new [**doma-auto-sniper**](https://github.com/sdmikecfc/doma-auto-sniper) is a headless, database-backed system with:
+> - Tier-based sizing (Micro → Mega) tuned from real trade history
+> - Five-rung take-profit ladder (1.15x / 1.3x / 1.5x / 2x / 3x)
+> - Dead-launch detection, Day-6 hard stop, and capital reallocation
+> - Dashboard API and a full deployment guide
+>
+> If you're deploying real capital, use that repo. This one will not receive further updates.
+
+---
+
 # Doma Protocol Sniper Bot
 
 Automatically snipes token launches on the [Doma Protocol](https://doma.xyz) bonding curve — buying at the floor price the instant a token goes live.
